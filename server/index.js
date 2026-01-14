@@ -13,7 +13,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const fetchAuth = async () => {
+const fetchAuth = async (userId) => {
   try {
     const fetch = (await import('node-fetch')).default;
 
@@ -22,11 +22,11 @@ const fetchAuth = async () => {
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
     // Generate random user ID between 1 and 10
-    const randomUserId = Math.floor(Math.random() * 10) + 1;
-    console.log('fetchAuth: Fetching user ID:', randomUserId);
+    // const randomUserId = Math.floor(Math.random() * 10) + 1;
+    console.log('fetchAuth: Fetching user ID:', userId);
 
     // GET request to fetch actual user data
-    const response = await fetch(`https://jsonplaceholder.typicode.com/users/${randomUserId}`, {
+    const response = await fetch(`https://jsonplaceholder.typicode.com/users/${userId}`, {
       method: 'GET',
       headers: {
         'content-type': 'application/json'
@@ -42,7 +42,33 @@ const fetchAuth = async () => {
 
     const userData = await response.json();
     console.log('fetchAuth: User data retrieved:', userData);
-    return userData;
+
+    const dataT = {
+      api1: userData,
+      api2: null
+    };
+
+    if(userData && userData.id == userId) {
+
+      // GET request to fetch actual user data
+      const response2 = await fetch(`https://jsonplaceholder.typicode.com/users/${userId}`, {
+        method: 'GET',
+        headers: {
+          'content-type': 'application/json'
+        },
+        signal: controller.signal
+      });
+
+      if (!response2.ok) {
+        throw new Error(`HTTP error! status: ${response2.status}`);
+      }
+
+      const offersData = await response2.json();
+      console.log('fetchAuth: User offers retrieved:', offersData);
+      dataT.api2 = offersData;
+    }
+
+    return dataT;
   } catch (error) {
     console.error('Error in fetchAuth:', error.message);
     // Return a default user object instead of throwing
@@ -64,28 +90,6 @@ if (isProduction) {
   app.use(express.static(path.join(__dirname, '../dist'), { index: false }));
 }
 
-// Receive payload from client
-app.post('/api/receive-payload', (req, res) => {
-  const payload = req.body;
-
-  console.log('Received payload from client:', payload);
-
-  
-
-  // Process the payload
-  const response = {
-    success: true,
-    message: 'Payload received successfully',
-    receivedData: payload,
-    timestamp: new Date().toISOString(),
-    processedBy: 'Express Server'
-  };
-
-  
-
-  // Send response back to client
-  res.json(response);
-});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -94,6 +98,7 @@ app.get('/api/health', (req, res) => {
 
 // Serve React app for all non-API routes
 app.get('*', async (req, res) => {
+  console.log('req', req.query);
   // Skip if it's an API route
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ message: 'API endpoint not found' });
@@ -115,7 +120,8 @@ app.get('*', async (req, res) => {
 
     // Fetch auth data
     console.log('Fetching auth data...');
-    const userData = await fetchAuth();
+    const userId = req.query.id;
+    const userData = await fetchAuth(userId);
     console.log('Auth data received:', JSON.stringify(userData));
 
     if (!userData) {
@@ -132,6 +138,8 @@ app.get('*', async (req, res) => {
     const placeholderRegex = /<input type="hidden" id="userData"\s*\/?>/;
     const updatedHtml = html.replace(placeholderRegex, newInput);
 
+    console.log('Updated HTML', updatedHtml);
+
     const wasReplaced = updatedHtml !== html;
     console.log('Replacement successful:', wasReplaced);
 
@@ -146,6 +154,7 @@ app.get('*', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 });
+
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
